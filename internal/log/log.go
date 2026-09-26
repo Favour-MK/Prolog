@@ -1,7 +1,7 @@
 package log
 
 import (
-	"fmt"
+	// "fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	api "github.com/Favour-MK/proglog/api/v1"
+	api "github.com/Favour-MK/prolog/api/v1"
 )
 
 // Log manages an ordered list of segments, plus a pointer to whichever one
@@ -103,8 +103,8 @@ func (l *Log) Read(off uint64) (*api.Record, error) {
 		}
 	}
 	if s == nil || s.nextOffset <= off {
-		return nil, fmt.Errorf("offset out of range: %d", off)
-	}
+	return nil, api.ErrOffsetOutOfRange{Offset: off}
+}
 	return s.Read(off)
 }
 
