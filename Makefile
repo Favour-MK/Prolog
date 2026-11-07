@@ -52,3 +52,23 @@ compile:
 		--go_opt=paths=source_relative \
 		--go-grpc_opt=paths=source_relative \
 		--proto_path=.
+
+TAG ?= 0.0.1
+
+.PHONY: build-docker
+build-docker:
+	docker build -t proglog:$(TAG) .
+
+# Run `make gencert` first so the server cert covers the in-cluster DNS names.
+.PHONY: k8s-tls-secret
+k8s-tls-secret:
+	kubectl create secret generic proglog-tls \
+		--from-file=${CONFIG_PATH}ca.pem \
+		--from-file=${CONFIG_PATH}server.pem \
+		--from-file=${CONFIG_PATH}server-key.pem \
+		--from-file=${CONFIG_PATH}root-client.pem \
+		--from-file=${CONFIG_PATH}root-client-key.pem
+
+.PHONY: deploy
+deploy:
+	helm upgrade --install proglog deploy/proglog --set image.tag=$(TAG)

@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "proglog.fullname" . }}
+  labels: {{- include "proglog.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "proglog.fullname" . }}
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels: {{- include "proglog.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "proglog.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/acl: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      initContainers:
+        # pod 0 bootstraps the Raft cluster; the others join it through Serf
+        - name: config-init
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |-
+              ID=$(echo $HOSTNAME | rev | cut -d- -f1 | rev)
+              cat > /var/run/proglog/config.yaml <<EOD
+              data-dir: /var/run/proglog/data
+              rpc-port: {{ .Values.rpcPort }}
+              bind-addr: "$HOSTNAME.{{ include "proglog.serviceDomain" . }}:{{ .Values.serfPort }}"
+              bootstrap: $([ $ID = 0 ] && echo true || echo false)
+              $([ $ID != 0 ] && echo 'start-join-addrs: "{{ include "proglog.fullname" . }}-0.{{ include "proglog.serviceDomain" . }}:{{ .Values.serfPort }}"')
+              EOD
+          volumeMounts:
+            - name: datadir
+              mountPath: /var/run/proglog
+      containers:
+        - name: {{ include "proglog.fullname" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --config-file=/var/run/proglog/config.yaml
+            - --acl-model-file=/etc/proglog/acl/model.conf
+            - --acl-policy-file=/etc/proglog/acl/policy.csv
+            - --server-tls-cert-file=/etc/proglog/tls/server.pem
+            - --server-tls-key-file=/etc/proglog/tls/server-key.pem
+            - --server-tls-ca-file=/etc/proglog/tls/ca.pem
+            - --peer-tls-cert-file=/etc/proglog/tls/root-client.pem
+            - --peer-tls-key-file=/etc/proglog/tls/root-client-key.pem
+            - --peer-tls-ca-file=/etc/proglog/tls/ca.pem
+            - --peer-tls-server-name={{ include "proglog.serviceDomain" . }}
+          ports:
+            - name: rpc
+              containerPort: {{ .Values.rpcPort }}
+            - name: serf-tcp
+              protocol: TCP
+              containerPort: {{ .Values.serfPort }}
+            - name: serf-udp
+              protocol: UDP
+              containerPort: {{ .Values.serfPort }}
+          readinessProbe:
+            {{- include "proglog.probe" . | nindent 12 }}
+            initialDelaySeconds: 5
+          livenessProbe:
+            {{- include "proglog.probe" . | nindent 12 }}
+            initialDelaySeconds: 10
+          {{- with .Values.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: datadir
+              mountPath: /var/run/proglog
+            - name: acl
+              mountPath: /etc/proglog/acl
+              readOnly: true
+            - name: tls
+              mountPath: /etc/proglog/tls
+              readOnly: true
+      volumes:
+        - name: acl
+          configMap:
+            name: {{ include "proglog.fullname" . }}-acl
+        - name: tls
+          secret:
+            secretName: {{ .Values.tls.secretName }}
+  volumeClaimTemplates:
+    - metadata:
+        name: datadir
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.storage }}

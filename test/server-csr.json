@@ -2,7 +2,9 @@
   "CN": "127.0.0.1",
   "hosts": [
     "localhost",
-    "127.0.0.1"
+    "127.0.0.1",
+    "proglog.default.svc.cluster.local",
+    "*.proglog.default.svc.cluster.local"
   ],
   "key": {
     "algo": "rsa",

@@ -1,0 +1,18 @@
+image:
+  repository: proglog
+  tag: 0.0.1
+  pullPolicy: IfNotPresent
+
+replicas: 3
+rpcPort: 8400
+serfPort: 8401
+
+storage: 1Gi
+# storageClassName: standard-rwo  # set this on GKE if you want a specific class
+
+tls:
+  # Secret holding ca.pem, server.pem, server-key.pem,
+  # root-client.pem and root-client-key.pem (see `make k8s-tls-secret`)
+  secretName: proglog-tls
+
+resources: {}
